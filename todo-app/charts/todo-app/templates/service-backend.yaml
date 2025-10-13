@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "todo-app.fullname" . }}-backend
+spec:
+  ports:
+    - port: {{ .Values.service.backend.port }}
+  selector:
+    app: {{ include "todo-app.name" . }}-backend

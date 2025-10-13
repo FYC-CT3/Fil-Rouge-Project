@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "todo-app.fullname" . }}-backend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "todo-app.name" . }}-backend
+  template:
+    metadata:
+      labels:
+        app: {{ include "todo-app.name" . }}-backend
+    spec:
+      containers:
+      - name: backend
+        image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+        ports:
+          - containerPort: {{ .Values.service.backend.port }}
+        env:
+          - name: DATABASE_URL
+            value: {{ default "postgresql://postgres:postgres@todo-postgres:5432/tododb" .Values.postgres.url | quote }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.service.backend.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 5

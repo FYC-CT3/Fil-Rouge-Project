@@ -1,0 +1,27 @@
+replicaCount: 1
+
+image:
+  frontend:
+    repository: todo-frontend
+    tag: latest
+  backend:
+    repository: todo-backend
+    tag: latest
+
+service:
+  frontend:
+    type: ClusterIP
+    port: 80
+  backend:
+    port: 3000
+
+postgres:
+  enabled: true
+  image: postgres:15-alpine
+  persistence:
+    enabled: false
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
