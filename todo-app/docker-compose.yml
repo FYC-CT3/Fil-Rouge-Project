@@ -5,8 +5,10 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tododb
     volumes:
       - dbdata:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -21,6 +23,7 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    restart: unless-stopped
   frontend:
     build: ./frontend
     ports:
