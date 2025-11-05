@@ -574,3 +574,635 @@ Le cluster est maintenant prêt à accueillir notre Todo App. Dans la prochaine 
 ---
 
 Cette première partie t'a donné les bases théoriques et pratiques nécessaires pour comprendre l'écosystème des conteneurs et de Kubernetes. Tu es maintenant prêt à découvrir les objets Kubernetes dans la partie 2 !
+
+# Cours fil rouge Kubernetes – Déploiement de la Todo App
+
+## Partie 2 – Objets de base Kubernetes (2h)
+
+Dans cette partie, nous allons découvrir les quatre objets fondamentaux de Kubernetes que tu utiliseras dans tous tes projets.
+
+---
+
+### 1. Pods (25 min)
+
+#### Qu'est-ce qu'un Pod ?
+
+Le Pod est la plus petite unité déployable dans Kubernetes. Contrairement à Docker où tu gères directement des conteneurs, dans Kubernetes tu travailles avec des Pods.
+
+**Un Pod contient :**
+- Un ou plusieurs conteneurs (généralement un seul)
+- Une adresse IP unique partagée par tous les conteneurs
+- Des volumes de stockage partagés
+- Des options de configuration
+
+**Caractéristiques importantes :**
+- Les conteneurs d'un Pod tournent toujours sur le même nœud
+- Ils peuvent communiquer via `localhost`
+- Ils démarrent et s'arrêtent ensemble
+- **Un Pod est éphémère** : s'il meurt, il ne revient pas automatiquement
+
+#### Structure d'un manifeste Pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-backend
+  labels:
+    app: todo-backend
+spec:
+  containers:
+  - name: backend
+    image: todo-backend:v1
+    ports:
+    - containerPort: 5000
+    env:
+    - name: PORT
+      value: "5000"
+```
+
+#### Exercice pratique
+
+**1. Crée le Pod backend** (`backend-pod.yaml`) :
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-backend
+  labels:
+    app: todo-backend
+spec:
+  containers:
+  - name: backend
+    image: todo-backend:v1
+    ports:
+    - containerPort: 5000
+```
+
+Déploie-le :
+
+```bash
+# Applique le manifeste
+kubectl apply -f backend-pod.yaml
+
+# Vérifie le statut
+kubectl get pods
+
+# Affiche les détails
+kubectl describe pod todo-backend
+
+# Consulte les logs
+kubectl logs todo-backend
+```
+
+**2. Crée les Pods frontend et database**
+
+Frontend (`frontend-pod.yaml`) :
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-frontend
+  labels:
+    app: todo-frontend
+spec:
+  containers:
+  - name: frontend
+    image: todo-frontend:v1
+    ports:
+    - containerPort: 80
+```
+
+Database (`db-pod.yaml`) :
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-db
+  labels:
+    app: todo-db
+spec:
+  containers:
+  - name: postgres
+    image: postgres:15-alpine
+    ports:
+    - containerPort: 5432
+    env:
+    - name: POSTGRES_PASSWORD
+      value: "todo123"
+    - name: POSTGRES_DB
+      value: "todoapp"
+```
+
+Déploie-les :
+```bash
+kubectl apply -f frontend-pod.yaml
+kubectl apply -f db-pod.yaml
+kubectl get pods
+```
+
+#### Commandes utiles
+
+```bash
+# Exécuter une commande dans le Pod
+kubectl exec -it todo-backend -- /bin/sh
+
+# Port-forwarding pour tester localement
+kubectl port-forward pod/todo-backend 5000:5000
+
+# Supprimer un Pod
+kubectl delete pod todo-backend
+```
+
+#### Test de fragilité
+
+Essaie de supprimer un Pod et observe :
+
+```bash
+kubectl delete pod todo-backend
+kubectl get pods
+# Le Pod a disparu et ne revient pas !
+```
+
+**Conclusion :** Les Pods seuls sont fragiles. C'est pourquoi on utilise des Deployments en production.
+
+---
+
+### 2. Services (25 min)
+
+#### Le problème
+
+Les Pods ont des IPs qui changent à chaque redémarrage. Comment le frontend peut-il contacter le backend si son IP change constamment ?
+
+#### La solution : les Services
+
+Un Service fournit :
+- Une IP virtuelle stable (ClusterIP)
+- Un nom DNS utilisable par les autres Pods
+- Un load balancing automatique entre plusieurs Pods
+
+```
+Service: todo-backend-svc
+ClusterIP: 10.96.15.42 (stable)
+         │
+    ┌────┴────┬────────┐
+    ▼         ▼        ▼
+  Pod 1     Pod 2    Pod 3
+(IP change) (IP change) (IP change)
+```
+
+#### Types de Services
+
+1. **ClusterIP** (par défaut) : Accessible seulement dans le cluster
+2. **NodePort** : Ouvre un port sur les nœuds (30000-32767)
+3. **LoadBalancer** : Crée un load balancer cloud (AWS ELB, etc.)
+
+#### Manifeste Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-backend-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: todo-backend  # Sélectionne les Pods avec ce label
+  ports:
+  - port: 5000         # Port du Service
+    targetPort: 5000   # Port du conteneur
+```
+
+#### Exercice pratique
+
+**1. Crée les Services** pour chaque composant :
+
+Backend (`backend-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-backend-svc
+spec:
+  selector:
+    app: todo-backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+```
+
+Frontend (`frontend-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-frontend-svc
+spec:
+  selector:
+    app: todo-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+Database (`db-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-db-svc
+spec:
+  selector:
+    app: todo-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+```
+
+Déploie-les :
+```bash
+kubectl apply -f backend-service.yaml
+kubectl apply -f frontend-service.yaml
+kubectl apply -f db-service.yaml
+
+# Vérifie
+kubectl get services
+```
+
+**2. Teste la communication**
+
+```bash
+# Lance un Pod temporaire pour tester
+kubectl run curl-test --image=alpine --restart=Never -it --rm -- sh
+
+# Dans le Pod, installe curl et teste
+apk add curl
+curl http://todo-backend-svc:5000/health
+
+# Le Service résout automatiquement vers les Pods !
+exit
+```
+
+#### Résolution DNS
+
+Dans Kubernetes, tu peux utiliser le nom du Service directement :
+```bash
+# Format simple (même namespace)
+curl http://todo-backend-svc:5000
+
+# Format complet
+curl http://todo-backend-svc.default.svc.cluster.local:5000
+```
+
+---
+
+### 3. Deployments (30 min)
+
+#### Pourquoi des Deployments ?
+
+Les Pods seuls ont des problèmes :
+- Pas de redémarrage automatique si supprimés
+- Impossible de scaler facilement
+- Pas de mises à jour progressives
+
+Les Deployments résolvent tout ça !
+
+#### Hiérarchie
+
+```
+Deployment
+    │
+    ↓ crée et gère
+ReplicaSet
+    │
+    ↓ maintient X réplicas de
+Pods
+```
+
+#### Manifeste Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend-deploy
+spec:
+  replicas: 2  # Nombre de Pods
+  selector:
+    matchLabels:
+      app: todo-backend
+  template:
+    metadata:
+      labels:
+        app: todo-backend
+    spec:
+      containers:
+      - name: backend
+        image: todo-backend:v1
+        ports:
+        - containerPort: 5000
+```
+
+#### Exercice pratique
+
+**1. Supprime les Pods précédents**
+
+```bash
+kubectl delete pod todo-backend todo-frontend todo-db
+```
+
+**2. Crée les Deployments**
+
+Backend (`backend-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend-deploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-backend
+  template:
+    metadata:
+      labels:
+        app: todo-backend
+    spec:
+      containers:
+      - name: backend
+        image: todo-backend:v1
+        ports:
+        - containerPort: 5000
+```
+
+Frontend (`frontend-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-frontend-deploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-frontend
+  template:
+    metadata:
+      labels:
+        app: todo-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: todo-frontend:v1
+        ports:
+        - containerPort: 80
+```
+
+Database (`db-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-db-deploy
+spec:
+  replicas: 1  # Une seule pour la DB
+  selector:
+    matchLabels:
+      app: todo-db
+  template:
+    metadata:
+      labels:
+        app: todo-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "todo123"
+        - name: POSTGRES_DB
+          value: "todoapp"
+```
+
+Déploie tout :
+```bash
+kubectl apply -f backend-deployment.yaml
+kubectl apply -f frontend-deployment.yaml
+kubectl apply -f db-deployment.yaml
+
+# Vérifie
+kubectl get deployments
+kubectl get pods
+```
+
+**3. Scaling**
+
+```bash
+# Scale à 3 réplicas
+kubectl scale deployment todo-backend-deploy --replicas=3
+
+# Vérifie les nouveaux Pods
+kubectl get pods -l app=todo-backend
+```
+
+**4. Mise à jour (Rolling Update)**
+
+```bash
+# Met à jour l'image
+kubectl set image deployment/todo-backend-deploy backend=todo-backend:v2
+
+# Observe le rollout
+kubectl rollout status deployment/todo-backend-deploy
+
+# Vérifie l'historique
+kubectl rollout history deployment/todo-backend-deploy
+```
+
+**5. Rollback**
+
+```bash
+# Revient à la version précédente
+kubectl rollout undo deployment/todo-backend-deploy
+
+# Vérifie
+kubectl get pods
+```
+
+#### Question : Pourquoi une seule réplica pour la DB ?
+
+La base de données est **stateful** (elle stocke des données). Si on crée plusieurs réplicas :
+- Chaque Pod aurait ses propres données
+- Problème de synchronisation
+- Risque de perte de données
+
+Pour scaler une DB, on utilise des **StatefulSets** (module avancé).
+
+---
+
+### 4. Ingress (30 min)
+
+#### Le problème de l'exposition externe
+
+Tes Services sont en ClusterIP = accessibles seulement dans le cluster. Comment les rendre accessibles depuis Internet ?
+
+**Solution : Ingress**
+- Un seul point d'entrée pour plusieurs services
+- Routage intelligent basé sur l'URL
+- Gestion SSL/TLS centralisée
+
+#### Architecture
+
+```
+Internet
+    │
+    ▼
+Ingress Controller (Nginx)
+    │
+    ├──> todo.local/     → Frontend Service
+    └──> todo.local/api/ → Backend Service
+```
+
+#### Manifeste Ingress
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: todo.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-frontend-svc
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-backend-svc
+            port:
+              number: 5000
+```
+
+#### Exercice pratique
+
+**1. Installe l'Ingress Controller**
+
+Pour Minikube :
+```bash
+minikube addons enable ingress
+
+# Vérifie
+kubectl get pods -n ingress-nginx
+```
+
+**2. Crée l'Ingress** (`todo-ingress.yaml`) :
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: todo.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-frontend-svc
+            port:
+              number: 80
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: todo-backend-svc
+            port:
+              number: 5000
+```
+
+Déploie :
+```bash
+kubectl apply -f todo-ingress.yaml
+kubectl get ingress
+```
+
+**3. Configure le fichier hosts**
+
+```bash
+# Récupère l'IP de Minikube
+minikube ip
+
+# Ajoute dans /etc/hosts
+echo "$(minikube ip) todo.local" | sudo tee -a /etc/hosts
+```
+
+**4. Teste l'application**
+
+```bash
+# Frontend
+curl http://todo.local/
+
+# Backend
+curl http://todo.local/api/health
+```
+
+Ouvre ton navigateur : `http://todo.local/`
+
+---
+
+## Conclusion
+
+**Bravo !** Tu as déployé une application complète sur Kubernetes.
+
+**Ce que tu as appris :**
+- **Pods** : Unité de base (éphémère)
+- **Services** : Découverte et load balancing
+- **Deployments** : Gestion robuste des applications
+- **Ingress** : Exposition externe intelligente
+
+**État de ton application :**
+- Frontend accessible
+- Backend API fonctionnelle
+- Base de données opérationnelle
+- Haute disponibilité (réplicas)
+- Accessible via une URL
+
+**Limitations actuelles :**
+- Mots de passe en clair
+- Pas de persistance des données
+- Configuration en dur
+
+**Prochaine étape :** Module 2 - Configuration et stockage avec ConfigMaps, Secrets et Volumes !
+
+### Commandes récapitulatives
+
+```bash
+# Vue d'ensemble
+kubectl get all
+
+# Logs
+kubectl logs -l app=todo-backend --tail=20
+
+# Nettoyage
+kubectl delete deployment --all
+kubectl delete service --all
+kubectl delete ingress --all
+```
