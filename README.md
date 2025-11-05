@@ -575,7 +575,6 @@ Le cluster est maintenant prêt à accueillir notre Todo App. Dans la prochaine 
 
 Cette première partie t'a donné les bases théoriques et pratiques nécessaires pour comprendre l'écosystème des conteneurs et de Kubernetes. Tu es maintenant prêt à découvrir les objets Kubernetes dans la partie 2 !
 
-# Cours fil rouge Kubernetes – Déploiement de la Todo App
 
 ## Partie 2 – Objets de base Kubernetes (2h)
 
