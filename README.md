@@ -10,60 +10,55 @@
 * Déployer une application réelle (**Todo App**) avec **Pods, Services, Deployments et Ingress**.
 * Comprendre les enjeux de l'orchestration en production.
 
-L’application Todo App que nous allons déployer contient :
+L'application Todo App que nous allons déployer contient :
+- **Un frontend** : Nginx qui sert une interface web simple et moderne
+- **Un backend** : API REST en Node.js + Express, qui gère la logique métier des tâches
+- **Une base de données** : PostgreSQL pour le stockage persistant et fiable des données
 
-* Un **frontend** (Nginx qui sert une interface simple).
-* Un **backend** (API REST en Node.js + Express, qui gère les tâches).
-* Une **base de données Postgres** (stockage persistant des données).
-
----
-
-# Partie 1 – Bases de la conteneurisation (1h)
+Cette architecture en trois tiers (3-tier architecture) représente un pattern classique d'applications web modernes que tu retrouveras fréquemment en entreprise.
 
 ---
 
-## 1. Virtualisation vs Conteneurisation (10 min)
+## Partie 1 – Bases de la conteneurisation (1h)
 
-### Contexte historique
+### 1. Virtualisation vs Conteneurisation (10 min)
+
+#### Contexte historique
+
 Avant les conteneurs, les équipes DevOps avaient principalement recours à la virtualisation pour isoler les applications. Cette approche, bien qu'efficace, présentait des limitations importantes que nous allons explorer.
 
-### Explication
+#### Explication détaillée
 
-**Les machines virtuelles (VMs)** :
+**Les machines virtuelles (VMs) :**
 Une VM embarque un système d'exploitation complet (OS invité) qui s'exécute au-dessus d'un hyperviseur. Chaque VM dispose de :
-
-* Son propre kernel
-* Ses propres drivers
-* Sa propre pile réseau
-* Ses propres services système (systemd, init, etc.)
+- Son propre kernel
+- Ses propres drivers
+- Sa propre pile réseau
+- Ses propres services système (systemd, init, etc.)
 
 Cette approche présente des inconvénients :
+- **Lourdeur** : chaque VM peut consommer plusieurs GB de RAM et de stockage
+- **Lenteur de démarrage** : 30 secondes à plusieurs minutes selon l'OS
+- **Gourmandise** : beaucoup de ressources gaspillées pour les services système dupliqués
+- **Complexité de maintenance** : mise à jour de multiples OS
 
-* **Lourdeur** : chaque VM peut consommer plusieurs GB de RAM et de stockage
-* **Lenteur de démarrage** : 30 secondes à plusieurs minutes selon l'OS
-* **Gourmandise** : beaucoup de ressources gaspillées pour les services système dupliqués
-* **Complexité de maintenance** : mise à jour de multiples OS
-
-**Les conteneurs** :
+**Les conteneurs :**
 Un conteneur partage le kernel de l'OS hôte mais isole les processus application dans des espaces de noms (namespaces) séparés. Cette isolation porte sur :
+- **Process ID (PID)** : chaque conteneur voit ses propres processus
+- **Network** : interface réseau virtuelle isolée
+- **Mount** : système de fichiers isolé
+- **UTS** : hostname et domaine séparés
+- **IPC** : communication inter-processus isolée
+- **User** : mapping des utilisateurs
 
-* **Process ID (PID)** : chaque conteneur voit ses propres processus
-* **Network** : interface réseau virtuelle isolée
-* **Mount** : système de fichiers isolé
-* **UTS** : hostname et domaine séparés
-* **IPC** : communication inter-processus isolée
-* **User** : mapping des utilisateurs
+Avantages des conteneurs :
+- **Légèreté** : quelques MB à quelques centaines de MB seulement
+- **Démarrage rapide** : quelques millisecondes à quelques secondes
+- **Efficacité** : partage du kernel, pas de duplication des services système
+- **Portabilité** : "Build once, run anywhere" - même environnement du dev à la prod
+- **Densité** : possibilité de faire tourner des dizaines/centaines de conteneurs sur une même machine
 
-**Avantages des conteneurs** :
-
-* **Légèreté** : quelques MB à quelques centaines de MB seulement
-* **Démarrage rapide** : quelques millisecondes à quelques secondes
-* **Efficacité** : partage du kernel, pas de duplication des services système
-* **Portabilité** : "Build once, run anywhere" - même environnement du dev à la prod
-* **Densité** : possibilité de faire tourner des dizaines/centaines de conteneurs sur une même machine
-
-
-### Illustration
+#### Illustration détaillée
 
 ```
 Architecture VM :
@@ -96,361 +91,1117 @@ Architecture Conteneurs :
 └───────────────────────────────────────────────────────────┘
 ```
 
-### Consigne projet- Analyse comparatives
-
-#### Scénario VM :
-
-* Tu aurais besoin de 3 VMs avec chacune un OS complet
-* VM Frontend : Ubuntu + Nginx (4 GB RAM, 20 GB stockage)
-* VM Backend : Ubuntu + Node.js (4 GB RAM, 20 GB stockage)
-* VM Database : Ubuntu + PostgreSQL (8 GB RAM, 50 GB stockage)
-* **Total** : 16 GB RAM, 90 GB stockage pour 3 services
-
-#### Scénario Conteneurs :
-
-* 3 conteneurs légers, chacun spécialisé pour son rôle
-* Container Frontend : Nginx Alpine (50 MB RAM, 20 MB stockage)
-* Container Backend : Node.js Alpine (200 MB RAM, 100 MB stockage)
-* Container Database : PostgreSQL (1 GB RAM, 5 GB stockage + données)
-* **Total** : ~1.3 GB RAM, ~200 MB stockage pour les services
-
-#### Questions de réflexion :
-
-* Quelle solution sera la plus simple si tu dois gérer 1000 utilisateurs simultanés ?
-* Comment ferais-tu pour scaler rapidement uniquement le backend si la charge API augmente ?
----
-
-## 2. Docker : concepts de base (15 min)
-
-### Explication
-
-Docker repose sur quatre concepts clés :
-
-* **Image** : modèle immuable qui contient le code et les dépendances.
-* **Conteneur** : exécution d’une image.
-* **Registry** : entrepôt d’images (ex : Docker Hub).
-* **Volume** : stockage persistant.
-
-/!\ Attention : si un conteneur meurt, ses données disparaissent (sauf si tu utilises un volume).
-
-### Consigne projet
-
-1. **Backend**
-
-   * Construis l’image :
-
-     ```bash
-     cd backend
-     docker build -t todo-backend:v1 .
-     docker run -p 5000:5000 todo-backend:v1
-     ```
-   * Vérifie que l’API répond :
-     `http://localhost:5000/tasks`
-
-2. **Frontend**
-
-   * Construis l’image :
-
-     ```bash
-     cd frontend
-     docker build -t todo-frontend:v1 .
-     docker run -p 8080:80 todo-frontend:v1
-     ```
-   * Vérifie :
-     `http://localhost:8080`
-
-3. **Base de données**
-
-   * Lance Postgres :
-
-     ```bash
-     docker run --name todo-db \
-       -e POSTGRES_PASSWORD=todo \
-       -e POSTGRES_DB=todo \
-       -p 5432:5432 -d postgres:15
-     ```
-
-À ce stade, tu as tes **3 conteneurs Docker** séparés.
-
----
-
-## 3. Orchestration et Kubernetes (10 min)
-
-### Explication
-
-Avec plusieurs conteneurs :
-
-* Comment gérer plusieurs instances du backend ?
-* Que se passe-t-il si la DB tombe ?
-* Comment exposer frontend + backend sur le même domaine ?
-
-Docker seul ne suffit pas → on a besoin d’un **orchestrateur**.
-
-Kubernetes permet de gérer tout ça automatiquement : déploiement, mise à l’échelle, supervision.
-
-### Consigne projet
-
-Réfléchis : *“Si je devais déployer Todo App en production uniquement avec Docker, quels problèmes aurais-je ?”*
-
-* Pas de redémarrage automatique.
-* Pas de montée en charge dynamique.
-* Pas de gestion réseau avancée.
-
----
-
-## 4. Architecture Kubernetes (15 min)
-
-### Explication
-
-Un cluster Kubernetes est composé de :
-
-* **Control Plane** (le cerveau) :
-
-  * `kube-apiserver` : point d’entrée.
-  * `etcd` : base de données clé-valeur.
-  * `scheduler` : place les Pods sur les bons nœuds.
-  * `controller-manager` : surveille et applique les règles.
-
-* **Worker Nodes** (les bras) :
-
-  * `kubelet` : exécute les Pods.
-  * `kube-proxy` : gère la connectivité réseau.
-  * **runtime conteneur** (containerd, cri-o).
-
-### Consigne projet
-
-1. Lance ton cluster :
-
-   ```bash
-   minikube start
-   ```
-2. Vérifie qu’il est actif :
-
-   ```bash
-   kubectl get nodes
-   kubectl get pods -A
-   ```
-
-Le cluster est prêt à accueillir Todo App.
-
----
-
-# Partie 2 – Objets de base Kubernetes (2h)
-
----
-
-## 1. Pods (25 min)
-
-### Explication
-
-Un **Pod** est la plus petite unité déployable dans Kubernetes.
-
-* Contient 1 ou plusieurs conteneurs.
-* Partage l’IP et les volumes.
-* /!\ Fragile : il peut disparaître et ne pas être relancé.
-
-### Consigne projet
-
-1. Crée un Pod pour le **backend** :
-
-   ```yaml
-   apiVersion: v1
-   kind: Pod
-   metadata:
-     name: todo-backend
-     labels:
-       app: todo-backend
-   spec:
-     containers:
-       - name: backend
-         image: todo-backend:v1
-         ports:
-           - containerPort: 5000
-   ```
-
-   ```bash
-   kubectl apply -f backend-pod.yaml
-   kubectl get pods
-   ```
-
-2. Fais de même pour le **frontend** et la **DB**.
-
-Question : *“Que se passe-t-il si un Pod crash ?”*
-
----
-
-## 2. Services (25 min)
-
-### Explication
-
-Les Pods changent d’IP → communication instable.
-Solution : un **Service** fournit une IP stable et un nom DNS interne.
-
-Types :
-
-* **ClusterIP** (par défaut, interne).
-* **NodePort** (ouvre un port du nœud).
-* **LoadBalancer** (cloud).
-
-### Consigne projet
-
-1. Crée un Service pour le **backend** :
-
-   ```yaml
-   apiVersion: v1
-   kind: Service
-   metadata:
-     name: todo-backend-svc
-   spec:
-     selector:
-       app: todo-backend
-     ports:
-       - port: 5000
-         targetPort: 5000
-   ```
-
-   ```bash
-   kubectl apply -f backend-svc.yaml
-   kubectl get svc
-   ```
-
-2. Crée aussi un Service pour le **frontend** et pour la **DB**.
-
-Teste depuis un Pod temporaire :
+#### Consigne projet - Analyse comparative
+
+Imagine que tu dois déployer la Todo App (frontend + backend + DB) pour une startup qui grandit rapidement :
+
+**Scénario VM :**
+- Tu aurais besoin de 3 VMs avec chacune un OS complet
+- VM Frontend : Ubuntu + Nginx (4 GB RAM, 20 GB stockage)
+- VM Backend : Ubuntu + Node.js (4 GB RAM, 20 GB stockage)  
+- VM Database : Ubuntu + PostgreSQL (8 GB RAM, 50 GB stockage)
+- **Total** : 16 GB RAM, 90 GB stockage pour 3 services
+
+**Scénario Conteneurs :**
+- 3 conteneurs légers, chacun spécialisé pour son rôle
+- Container Frontend : Nginx Alpine (50 MB RAM, 20 MB stockage)
+- Container Backend : Node.js Alpine (200 MB RAM, 100 MB stockage)
+- Container Database : PostgreSQL (1 GB RAM, 5 GB stockage + données)
+- **Total** : ~1.3 GB RAM, ~200 MB stockage pour les services
+
+**Questions de réflexion :**
+1. Quelle solution sera la plus simple si tu dois gérer 1000 utilisateurs simultanés ?
+2. Comment ferais-tu pour scaler rapidement uniquement le backend si la charge API augmente ?
+3. Quel est l'impact économique sur les coûts cloud entre les deux approches ?
+
+### 2. Docker : concepts de base (15 min)
+
+#### Introduction à Docker
+
+Docker a révolutionné le monde du développement en 2013 en standardisant la conteneurisation. Il s'agit d'une plateforme qui permet de créer, déployer et exécuter des applications dans des conteneurs.
+
+#### Explication des concepts clés
+
+Docker repose sur quatre concepts fondamentaux que tout développeur doit maîtriser :
+
+**1. Image Docker**
+- **Définition** : Modèle immuable (read-only) qui contient tout le nécessaire pour exécuter une application
+- **Contenu** : code source, runtime, bibliothèques, variables d'environnement, fichiers de configuration
+- **Structure en couches** : chaque instruction dans le Dockerfile crée une nouvelle couche
+- **Avantage** : réutilisation des couches entre images (efficacité de stockage)
+
+```dockerfile
+# Exemple de Dockerfile pour le backend
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 5000
+CMD ["npm", "start"]
+```
+
+**2. Conteneur Docker**
+- **Définition** : Instance en cours d'exécution d'une image
+- **Analogie** : l'image est la "classe", le conteneur est "l'objet"
+- **Cycle de vie** : created → running → stopped → removed
+- **Isolation** : processus, réseau, système de fichiers
+
+**3. Registry Docker**
+- **Docker Hub** : registry public officiel avec millions d'images
+- **Registries privés** : pour les entreprises (AWS ECR, Google GCR, Azure ACR)
+- **Commandes** : `docker pull`, `docker push`, `docker search`
+
+**4. Volume Docker**
+- **Problème** : données dans un conteneur = éphémères
+- **Solution** : volumes pour persister les données
+- **Types** : 
+  - Volumes nommés (gérés par Docker)
+  - Bind mounts (répertoires hôte)
+  - tmpfs mounts (en mémoire)
+
+#### ⚠️ Points d'attention critiques
+
+**Persistance des données :**
+Si un conteneur meurt (crash, arrêt, suppression), toutes ses données internes disparaissent définitivement. C'est pourquoi :
+- Utilise TOUJOURS des volumes pour les données importantes
+- Ne stocke jamais de données critiques dans le système de fichiers du conteneur
+- Les bases de données DOIVENT utiliser des volumes persistants
+
+**Sécurité :**
+- Évite d'exécuter des conteneurs en tant que root
+- Scanne tes images pour détecter les vulnérabilités
+- Utilise des images de base minimales (Alpine, Distroless)
+
+#### Consigne projet - Containerisation de la Todo App
+
+Nous allons containeriser chaque composant de notre application :
+
+**1. Backend Node.js**
 
 ```bash
-kubectl run curl --image=alpine --restart=Never -it -- sh
+# Navigue vers le répertoire backend
+cd backend
+
+# Examine le Dockerfile
+cat Dockerfile
+
+# Construis l'image avec un tag versioned
+docker build -t todo-backend:v1 .
+
+# Vérifie que l'image a été créée
+docker images | grep todo-backend
+
+# Lance le conteneur
+docker run -d -p 5000:5000 --name backend-container todo-backend:v1
+
+# Vérifie que le conteneur fonctionne
+docker ps
+```
+
+Test de l'API :
+```bash
+# Test de santé de l'API
+curl http://localhost:5000/health
+# Résultat attendu : {"status": "OK", "timestamp": "..."}
+
+# Test des endpoints principaux
+curl http://localhost:5000/tasks
+# Résultat : [] (liste vide au début)
+
+# Test de création d'une tâche
+curl -X POST http://localhost:5000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test task", "description": "Ma première tâche"}'
+```
+
+**2. Frontend Nginx**
+
+```bash
+# Navigue vers le répertoire frontend
+cd ../frontend
+
+# Examine la structure
+ls -la
+# Contient : index.html, style.css, app.js, Dockerfile
+
+# Construis l'image
+docker build -t todo-frontend:v1 .
+
+# Lance le conteneur
+docker run -d -p 8080:80 --name frontend-container todo-frontend:v1
+
+# Vérifie l'accès
+curl -I http://localhost:8080
+# Code de retour 200 attendu
+```
+
+Test dans le navigateur :
+- Ouvre http://localhost:8080
+- Vérifie que l'interface se charge correctement
+- Note que l'interface ne peut pas encore communiquer avec l'API (problème réseau)
+
+**3. Base de données PostgreSQL**
+
+```bash
+# Crée un volume pour persister les données
+docker volume create todo-db-data
+
+# Lance PostgreSQL avec le volume
+docker run -d \
+  --name todo-db \
+  -e POSTGRES_PASSWORD=todo123 \
+  -e POSTGRES_DB=todoapp \
+  -e POSTGRES_USER=todo \
+  -v todo-db-data:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  postgres:15-alpine
+
+# Vérifie que la DB est prête
+docker logs todo-db
+
+# Test de connexion
+docker exec -it todo-db psql -U todo -d todoapp -c "\l"
+```
+
+**État actuel et limitations :**
+À ce stade, tu as tes 3 conteneurs Docker qui fonctionnent séparément, mais ils présentent plusieurs problèmes :
+- **Isolation réseau** : les conteneurs ne peuvent pas communiquer entre eux
+- **Gestion manuelle** : démarrage/arrêt manuel de chaque conteneur
+- **Pas de redémarrage automatique** : si un conteneur crash, il ne redémarre pas
+- **Configuration en dur** : les URLs et ports sont fixes
+
+**Nettoyage :**
+```bash
+# Arrêter tous les conteneurs
+docker stop backend-container frontend-container todo-db
+
+# Les supprimer
+docker rm backend-container frontend-container todo-db
+
+# Nettoyer les images (optionnel)
+docker rmi todo-backend:v1 todo-frontend:v1
+```
+
+### 3. Orchestration et Kubernetes (10 min)
+
+#### Le problème de la gestion manuelle des conteneurs
+
+Avec notre expérience précédente, tu as pu constater les limitations de Docker utilisé seul pour une application multi-composants. En production, ces défis sont amplifiés :
+
+**Problèmes de disponibilité :**
+- Que se passe-t-il si le conteneur backend crash à 2h du matin ?
+- Comment s'assurer que la base de données redémarre automatiquement ?
+- Qui surveille la santé de chaque service 24h/7j ?
+
+**Problèmes de montée en charge :**
+- Comment gérer 10, 100, 1000 utilisateurs simultanés ?
+- Faut-il lancer plus d'instances du backend ou du frontend ?
+- Comment répartir la charge entre plusieurs instances ?
+
+**Problèmes de réseau et découverte de services :**
+- Comment le frontend trouve-t-il l'IP du backend qui peut changer ?
+- Comment exposer l'application sur un même domaine (todo.monsite.com) ?
+- Comment gérer les certificats SSL/TLS ?
+
+**Problèmes de mise à jour et rollback :**
+- Comment déployer une nouvelle version sans interruption de service ?
+- Comment revenir en arrière si la nouvelle version pose problème ?
+- Comment faire des déploiements progressifs (blue/green, canary) ?
+
+#### Explication de l'orchestration
+
+L'orchestration de conteneurs répond à ces défis en automatisant :
+
+**1. La planification (Scheduling)**
+- Décider sur quel serveur déployer chaque conteneur
+- Prendre en compte les ressources disponibles (CPU, RAM)
+- Respecter les contraintes de placement (zones de disponibilité)
+
+**2. La gestion du cycle de vie**
+- Démarrer/arrêter/redémarrer automatiquement les conteneurs
+- Surveiller leur santé et les remplacer si nécessaire
+- Gérer les mises à jour rolling sans interruption
+
+**3. La mise en réseau**
+- Créer des réseaux virtuels entre conteneurs
+- Fournir la découverte de services automatique
+- Gérer l'exposition externe avec load balancing
+
+**4. La gestion de la configuration**
+- Centraliser les variables d'environnement et secrets
+- Permettre des configurations par environnement (dev/staging/prod)
+- Gérer les volumes et le stockage persistant
+
+#### Pourquoi Kubernetes ?
+
+Kubernetes (k8s) est devenu LE standard de l'orchestration pour plusieurs raisons :
+
+**Adoption industrielle :**
+- Utilisé par Google, Netflix, Spotify, Airbnb, etc.
+- Plus de 90% des entreprises Fortune 500 utilisent Kubernetes
+- Écosystème riche avec des milliers d'outils compatibles
+
+**Philosophie déclarative :**
+- Tu décris l'état désiré (YAML), Kubernetes se charge du reste
+- Auto-réparation : le système converge automatiquement vers l'état désiré
+- Idempotence : appliquer la même configuration plusieurs fois donne le même résultat
+
+**Extensibilité :**
+- API extensible avec des Custom Resources
+- Operators pour automatiser la gestion d'applications complexes
+- Multi-cloud et hybrid-cloud ready
+
+#### Consigne projet - Réflexion sur les défis
+
+Réfléchis : "Si je devais déployer Todo App en production uniquement avec Docker, quels problèmes aurais-je ?"
+
+**Problèmes identifiés :**
+
+1. **Pas de redémarrage automatique**
+   - Si le backend crash, l'application est indisponible
+   - Besoin de surveillance 24h/7j ou de scripts de monitoring
+
+2. **Pas de montée en charge dynamique**
+   - Impossible de lancer automatiquement plus d'instances selon la charge
+   - Risque de surcharge lors des pics de trafic
+
+3. **Pas de gestion réseau avancée**
+   - Communication entre conteneurs complexe à configurer
+   - Pas de load balancing intégré
+   - Gestion manuelle des ports et IPs
+
+4. **Pas de gestion centralisée de la configuration**
+   - Secrets en dur dans les conteneurs ou variables d'environnement
+   - Difficile de changer la configuration sans rebuild
+
+5. **Déploiements risqués**
+   - Pas de rolling updates
+   - Pas de rollback automatique
+   - Interruption de service lors des mises à jour
+
+6. **Manque d'observabilité**
+   - Pas de centralisation des logs
+   - Pas de métriques intégrées
+   - Difficile de déboguer les problèmes
+
+### 4. Architecture Kubernetes (15 min)
+
+#### Vue d'ensemble de Kubernetes
+
+Kubernetes est un système d'orchestration distribué qui fonctionne selon une architecture maître-esclaves. Il sépare clairement les responsabilités entre le "cerveau" (Control Plane) qui prend les décisions et les "bras" (Worker Nodes) qui exécutent le travail.
+
+#### Explication détaillée du Control Plane (le cerveau)
+
+Le Control Plane contient tous les composants qui gèrent l'état du cluster et prennent les décisions d'orchestration :
+
+**1. kube-apiserver**
+- **Rôle** : Point d'entrée unique pour toutes les requêtes au cluster
+- **Fonctionnement** : API REST qui valide, authentifie et autorise les requêtes
+- **Interactions** : kubectl, interfaces web, autres composants K8s communiquent via cette API
+- **Persistance** : Toutes les modifications passent par l'API server avant d'être stockées
+
+**2. etcd**
+- **Rôle** : Base de données clé-valeur distribuée et cohérente
+- **Contenu** : État complet du cluster (Pods, Services, ConfigMaps, Secrets, etc.)
+- **Caractéristiques** : Haute disponibilité, cohérence forte, snapshots pour backup
+- **Criticité** : Si etcd est perdu, tout l'état du cluster est perdu
+
+**3. kube-scheduler**
+- **Rôle** : Décide sur quel nœud placer chaque nouveau Pod
+- **Critères de décision** :
+  - Ressources disponibles (CPU, RAM, stockage)
+  - Contraintes de placement (node selectors, affinity/anti-affinity)
+  - Taints et tolerations
+  - Politiques de qualité de service
+- **Algorithme** : Scoring complexe pour choisir le meilleur nœud
+
+**4. kube-controller-manager**
+- **Rôle** : Ensemble de contrôleurs qui surveillent l'état et appliquent les corrections
+- **Contrôleurs principaux** :
+  - **Node Controller** : surveille la santé des nœuds
+  - **ReplicaSet Controller** : maintient le nombre désiré de Pods
+  - **Endpoints Controller** : maintient la liste des endpoints des Services
+  - **Service Account Controller** : crée les comptes de service par défaut
+
+#### Explication détaillée des Worker Nodes (les bras)
+
+Chaque Worker Node exécute les Pods et maintient la communication avec le Control Plane :
+
+**1. kubelet**
+- **Rôle** : Agent principal qui gère les Pods sur le nœud
+- **Responsabilités** :
+  - Récupère les spécifications de Pods depuis l'API server
+  - Garantit que les conteneurs définis dans les Pods tournent
+  - Rapporte l'état des Pods et du nœud au Control Plane
+  - Exécute les probes de santé (liveness, readiness, startup)
+- **Communication** : Avec l'API server et le container runtime
+
+**2. kube-proxy**
+- **Rôle** : Gère la connectivité réseau et le load balancing
+- **Fonctionnement** :
+  - Maintient les règles réseau sur chaque nœud
+  - Redirige le trafic vers les bons Pods via les Services
+  - Implémente différents modes : iptables, IPVS, userspace
+- **Load Balancing** : Répartit les requêtes entre les Pods d'un même Service
+
+**3. Container Runtime**
+- **Rôle** : Exécute et gère les conteneurs
+- **Implémentations** :
+  - **containerd** : runtime de référence, performant et minimal
+  - **CRI-O** : runtime optimisé pour Kubernetes
+  - **Docker** : historique, maintenant remplacé par containerd
+- **Interface** : Container Runtime Interface (CRI) pour la standardisation
+
+#### Schéma architectural détaillé
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    CONTROL PLANE                           │
+│  ┌─────────────────┐  ┌─────────────────┐                │
+│  │  kube-apiserver │  │      etcd       │                │
+│  │   (API REST)    │  │  (key-value)    │                │
+│  └─────────────────┘  └─────────────────┘                │
+│  ┌─────────────────┐  ┌─────────────────┐                │
+│  │ kube-scheduler  │  │ controller-mgr  │                │
+│  │ (placement)     │  │ (état désiré)   │                │
+│  └─────────────────┘  └─────────────────┘                │
+└─────────────────────────────────────────────────────────────┘
+                          │ API calls
+                          │
+┌─────────────────────────────────────────────────────────────┐
+│                    WORKER NODES                            │
+│                                                             │
+│  Node 1               │            Node 2                  │
+│  ┌─────────────────┐  │  ┌─────────────────┐              │
+│  │     kubelet     │  │  │     kubelet     │              │
+│  │ (agent nœud)    │  │  │ (agent nœud)    │              │
+│  └─────────────────┘  │  └─────────────────┘              │
+│  ┌─────────────────┐  │  ┌─────────────────┐              │
+│  │   kube-proxy    │  │  │   kube-proxy    │              │
+│  │ (réseau/LB)     │  │  │ (réseau/LB)     │              │
+│  └─────────────────┘  │  └─────────────────┘              │
+│  ┌─────────────────┐  │  ┌─────────────────┐              │
+│  │ container-runtime│  │  │ container-runtime│              │
+│  │ (containerd)    │  │  │ (containerd)    │              │
+│  └─────────────────┘  │  └─────────────────┘              │
+│                       │                                    │
+│  ┌─────────────────┐  │  ┌─────────────────┐              │
+│  │     PODS        │  │  │     PODS        │              │
+│  │ [frontend] [db] │  │  │   [backend]     │              │
+│  └─────────────────┘  │  └─────────────────┘              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Consigne projet - Mise en place de l'environnement
+
+**1. Installation et démarrage du cluster local**
+
+Choisis l'outil adapté à ton environnement :
+
+```bash
+# Option A : Minikube (recommandé pour débuter)
+minikube start --driver=docker --memory=4096 --cpus=2
+
+# Option B : Kind (Kubernetes in Docker)
+kind create cluster --name todo-cluster
+
+# Option C : Docker Desktop (si disponible)
+# Activer Kubernetes dans les paramètres Docker Desktop
+```
+
+**2. Vérification du cluster**
+
+```bash
+# Vérifie que kubectl est configuré
+kubectl version --client --short
+
+# Affiche les informations du cluster
+kubectl cluster-info
+
+# Liste les nœuds du cluster
+kubectl get nodes -o wide
+# Résultat attendu : un ou plusieurs nœuds en status "Ready"
+
+# Affiche tous les Pods système
+kubectl get pods --all-namespaces
+# Tu verras les composants du Control Plane et addons
+```
+
+**3. Exploration de l'architecture**
+
+```bash
+# Examine les composants du Control Plane
+kubectl get pods -n kube-system
+# Résultat : etcd, kube-apiserver, kube-controller-manager, kube-scheduler
+
+# Regarde les détails d'un Pod système
+kubectl describe pod -n kube-system <nom-du-pod-apiserver>
+
+# Vérifie les événements récents
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+# Affiche la configuration actuelle de kubectl
+kubectl config view
+```
+
+**4. Tests de base**
+
+```bash
+# Teste l'API server
+kubectl api-versions
+
+# Crée un Pod de test simple
+kubectl run test-pod --image=nginx --restart=Never
+
+# Vérifie qu'il démarre
+kubectl get pods -w
+# Utilise Ctrl+C pour arrêter le watch
+
+# Nettoie
+kubectl delete pod test-pod
+```
+
+**État du cluster :**
+Le cluster est maintenant prêt à accueillir notre Todo App. Dans la prochaine partie, nous découvrirons les objets Kubernetes (Pods, Services, Deployments) qui nous permettront de déployer notre application de manière robuste et scalable.
+
+**Points clés à retenir :**
+- Kubernetes suit une architecture distribuée avec séparation claire des responsabilités
+- Le Control Plane prend les décisions, les Worker Nodes exécutent
+- L'état désiré est stocké dans etcd et maintenu par les controllers
+- kubectl est ton interface principale pour interagir avec le cluster
+
+---
+
+Cette première partie t'a donné les bases théoriques et pratiques nécessaires pour comprendre l'écosystème des conteneurs et de Kubernetes. Tu es maintenant prêt à découvrir les objets Kubernetes dans la partie 2 !
+
+
+## Partie 2 – Objets de base Kubernetes (2h)
+
+Dans cette partie, nous allons découvrir les quatre objets fondamentaux de Kubernetes que tu utiliseras dans tous tes projets.
+
+---
+
+### 1. Pods (25 min)
+
+#### Qu'est-ce qu'un Pod ?
+
+Le Pod est la plus petite unité déployable dans Kubernetes. Contrairement à Docker où tu gères directement des conteneurs, dans Kubernetes tu travailles avec des Pods.
+
+**Un Pod contient :**
+- Un ou plusieurs conteneurs (généralement un seul)
+- Une adresse IP unique partagée par tous les conteneurs
+- Des volumes de stockage partagés
+- Des options de configuration
+
+**Caractéristiques importantes :**
+- Les conteneurs d'un Pod tournent toujours sur le même nœud
+- Ils peuvent communiquer via `localhost`
+- Ils démarrent et s'arrêtent ensemble
+- **Un Pod est éphémère** : s'il meurt, il ne revient pas automatiquement
+
+#### Structure d'un manifeste Pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-backend
+  labels:
+    app: todo-backend
+spec:
+  containers:
+  - name: backend
+    image: todo-backend:v1
+    ports:
+    - containerPort: 5000
+    env:
+    - name: PORT
+      value: "5000"
+```
+
+#### Exercice pratique
+
+**1. Crée le Pod backend** (`backend-pod.yaml`) :
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-backend
+  labels:
+    app: todo-backend
+spec:
+  containers:
+  - name: backend
+    image: todo-backend:v1
+    ports:
+    - containerPort: 5000
+```
+
+Déploie-le :
+
+```bash
+# Applique le manifeste
+kubectl apply -f backend-pod.yaml
+
+# Vérifie le statut
+kubectl get pods
+
+# Affiche les détails
+kubectl describe pod todo-backend
+
+# Consulte les logs
+kubectl logs todo-backend
+```
+
+**2. Crée les Pods frontend et database**
+
+Frontend (`frontend-pod.yaml`) :
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-frontend
+  labels:
+    app: todo-frontend
+spec:
+  containers:
+  - name: frontend
+    image: todo-frontend:v1
+    ports:
+    - containerPort: 80
+```
+
+Database (`db-pod.yaml`) :
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: todo-db
+  labels:
+    app: todo-db
+spec:
+  containers:
+  - name: postgres
+    image: postgres:15-alpine
+    ports:
+    - containerPort: 5432
+    env:
+    - name: POSTGRES_PASSWORD
+      value: "todo123"
+    - name: POSTGRES_DB
+      value: "todoapp"
+```
+
+Déploie-les :
+```bash
+kubectl apply -f frontend-pod.yaml
+kubectl apply -f db-pod.yaml
+kubectl get pods
+```
+
+#### Commandes utiles
+
+```bash
+# Exécuter une commande dans le Pod
+kubectl exec -it todo-backend -- /bin/sh
+
+# Port-forwarding pour tester localement
+kubectl port-forward pod/todo-backend 5000:5000
+
+# Supprimer un Pod
+kubectl delete pod todo-backend
+```
+
+#### Test de fragilité
+
+Essaie de supprimer un Pod et observe :
+
+```bash
+kubectl delete pod todo-backend
+kubectl get pods
+# Le Pod a disparu et ne revient pas !
+```
+
+**Conclusion :** Les Pods seuls sont fragiles. C'est pourquoi on utilise des Deployments en production.
+
+---
+
+### 2. Services (25 min)
+
+#### Le problème
+
+Les Pods ont des IPs qui changent à chaque redémarrage. Comment le frontend peut-il contacter le backend si son IP change constamment ?
+
+#### La solution : les Services
+
+Un Service fournit :
+- Une IP virtuelle stable (ClusterIP)
+- Un nom DNS utilisable par les autres Pods
+- Un load balancing automatique entre plusieurs Pods
+
+```
+Service: todo-backend-svc
+ClusterIP: 10.96.15.42 (stable)
+         │
+    ┌────┴────┬────────┐
+    ▼         ▼        ▼
+  Pod 1     Pod 2    Pod 3
+(IP change) (IP change) (IP change)
+```
+
+#### Types de Services
+
+1. **ClusterIP** (par défaut) : Accessible seulement dans le cluster
+2. **NodePort** : Ouvre un port sur les nœuds (30000-32767)
+3. **LoadBalancer** : Crée un load balancer cloud (AWS ELB, etc.)
+
+#### Manifeste Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-backend-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: todo-backend  # Sélectionne les Pods avec ce label
+  ports:
+  - port: 5000         # Port du Service
+    targetPort: 5000   # Port du conteneur
+```
+
+#### Exercice pratique
+
+**1. Crée les Services** pour chaque composant :
+
+Backend (`backend-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-backend-svc
+spec:
+  selector:
+    app: todo-backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+```
+
+Frontend (`frontend-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-frontend-svc
+spec:
+  selector:
+    app: todo-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+Database (`db-service.yaml`) :
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-db-svc
+spec:
+  selector:
+    app: todo-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+```
+
+Déploie-les :
+```bash
+kubectl apply -f backend-service.yaml
+kubectl apply -f frontend-service.yaml
+kubectl apply -f db-service.yaml
+
+# Vérifie
+kubectl get services
+```
+
+**2. Teste la communication**
+
+```bash
+# Lance un Pod temporaire pour tester
+kubectl run curl-test --image=alpine --restart=Never -it --rm -- sh
+
+# Dans le Pod, installe curl et teste
 apk add curl
-curl todo-backend-svc:5000/tasks
+curl http://todo-backend-svc:5000/health
+
+# Le Service résout automatiquement vers les Pods !
+exit
+```
+
+#### Résolution DNS
+
+Dans Kubernetes, tu peux utiliser le nom du Service directement :
+```bash
+# Format simple (même namespace)
+curl http://todo-backend-svc:5000
+
+# Format complet
+curl http://todo-backend-svc.default.svc.cluster.local:5000
 ```
 
 ---
 
-## 3. Deployments (30 min)
+### 3. Deployments (30 min)
 
-### Explication
+#### Pourquoi des Deployments ?
 
-Un **Deployment** gère :
+Les Pods seuls ont des problèmes :
+- Pas de redémarrage automatique si supprimés
+- Impossible de scaler facilement
+- Pas de mises à jour progressives
 
-* Combien de Pods lancer.
-* Les mises à jour progressives.
-* Les rollbacks.
+Les Deployments résolvent tout ça !
 
-Relation : **Deployment → ReplicaSet → Pods**.
+#### Hiérarchie
 
-### Consigne projet
+```
+Deployment
+    │
+    ↓ crée et gère
+ReplicaSet
+    │
+    ↓ maintient X réplicas de
+Pods
+```
 
-1. Déploie le backend avec un Deployment :
+#### Manifeste Deployment
 
-   ```yaml
-   apiVersion: apps/v1
-   kind: Deployment
-   metadata:
-     name: todo-backend-deploy
-   spec:
-     replicas: 2
-     selector:
-       matchLabels:
-         app: todo-backend
-     template:
-       metadata:
-         labels:
-           app: todo-backend
-       spec:
-         containers:
-           - name: backend
-             image: todo-backend:v1
-             ports:
-               - containerPort: 5000
-   ```
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend-deploy
+spec:
+  replicas: 2  # Nombre de Pods
+  selector:
+    matchLabels:
+      app: todo-backend
+  template:
+    metadata:
+      labels:
+        app: todo-backend
+    spec:
+      containers:
+      - name: backend
+        image: todo-backend:v1
+        ports:
+        - containerPort: 5000
+```
 
-   ```bash
-   kubectl apply -f backend-deploy.yaml
-   kubectl get pods
-   ```
+#### Exercice pratique
 
-2. Mets à jour l’image du backend :
+**1. Supprime les Pods précédents**
 
-   ```bash
-   kubectl set image deployment/todo-backend-deploy backend=todo-backend:v2
-   kubectl rollout status deployment/todo-backend-deploy
-   ```
+```bash
+kubectl delete pod todo-backend todo-frontend todo-db
+```
 
-Question : *“Pourquoi ne pas scaler la DB comme le backend ?”*
-Réponse attendue : la DB est **stateful**, on verra ça plus tard.
+**2. Crée les Deployments**
+
+Backend (`backend-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend-deploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-backend
+  template:
+    metadata:
+      labels:
+        app: todo-backend
+    spec:
+      containers:
+      - name: backend
+        image: todo-backend:v1
+        ports:
+        - containerPort: 5000
+```
+
+Frontend (`frontend-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-frontend-deploy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-frontend
+  template:
+    metadata:
+      labels:
+        app: todo-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: todo-frontend:v1
+        ports:
+        - containerPort: 80
+```
+
+Database (`db-deployment.yaml`) :
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-db-deploy
+spec:
+  replicas: 1  # Une seule pour la DB
+  selector:
+    matchLabels:
+      app: todo-db
+  template:
+    metadata:
+      labels:
+        app: todo-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "todo123"
+        - name: POSTGRES_DB
+          value: "todoapp"
+```
+
+Déploie tout :
+```bash
+kubectl apply -f backend-deployment.yaml
+kubectl apply -f frontend-deployment.yaml
+kubectl apply -f db-deployment.yaml
+
+# Vérifie
+kubectl get deployments
+kubectl get pods
+```
+
+**3. Scaling**
+
+```bash
+# Scale à 3 réplicas
+kubectl scale deployment todo-backend-deploy --replicas=3
+
+# Vérifie les nouveaux Pods
+kubectl get pods -l app=todo-backend
+```
+
+**4. Mise à jour (Rolling Update)**
+
+```bash
+# Met à jour l'image
+kubectl set image deployment/todo-backend-deploy backend=todo-backend:v2
+
+# Observe le rollout
+kubectl rollout status deployment/todo-backend-deploy
+
+# Vérifie l'historique
+kubectl rollout history deployment/todo-backend-deploy
+```
+
+**5. Rollback**
+
+```bash
+# Revient à la version précédente
+kubectl rollout undo deployment/todo-backend-deploy
+
+# Vérifie
+kubectl get pods
+```
+
+#### Question : Pourquoi une seule réplica pour la DB ?
+
+La base de données est **stateful** (elle stocke des données). Si on crée plusieurs réplicas :
+- Chaque Pod aurait ses propres données
+- Problème de synchronisation
+- Risque de perte de données
+
+Pour scaler une DB, on utilise des **StatefulSets** (module avancé).
 
 ---
 
-## 4. Ingress routes (30 min)
+### 4. Ingress (30 min)
 
-### Explication
+#### Le problème de l'exposition externe
 
-Les Services exposent en interne → pour un accès externe, on utilise un **Ingress**.
+Tes Services sont en ClusterIP = accessibles seulement dans le cluster. Comment les rendre accessibles depuis Internet ?
 
-* Fonctionne comme un reverse proxy.
-* Permet de router vers plusieurs Services avec un seul domaine.
+**Solution : Ingress**
+- Un seul point d'entrée pour plusieurs services
+- Routage intelligent basé sur l'URL
+- Gestion SSL/TLS centralisée
 
-### Consigne projet
+#### Architecture
 
-1. Crée un Service pour le frontend.
+```
+Internet
+    │
+    ▼
+Ingress Controller (Nginx)
+    │
+    ├──> todo.local/     → Frontend Service
+    └──> todo.local/api/ → Backend Service
+```
 
-2. Crée un Ingress :
+#### Manifeste Ingress
 
-   ```yaml
-   apiVersion: networking.k8s.io/v1
-   kind: Ingress
-   metadata:
-     name: todo-ingress
-   spec:
-     rules:
-       - host: todo.local
-         http:
-           paths:
-             - path: /
-               pathType: Prefix
-               backend:
-                 service:
-                   name: todo-frontend-svc
-                   port:
-                     number: 80
-             - path: /api
-               pathType: Prefix
-               backend:
-                 service:
-                   name: todo-backend-svc
-                   port:
-                     number: 5000
-   ```
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: todo.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-frontend-svc
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-backend-svc
+            port:
+              number: 5000
+```
 
-   ```bash
-   kubectl apply -f ingress.yaml
-   kubectl get ingress
-   ```
+#### Exercice pratique
 
-3. Ajoute dans ton fichier `hosts` :
+**1. Installe l'Ingress Controller**
 
-   ```bash
-   echo "$(minikube ip) todo.local" | sudo tee -a /etc/hosts
-   ```
+Pour Minikube :
+```bash
+minikube addons enable ingress
 
-4. Vérifie :
+# Vérifie
+kubectl get pods -n ingress-nginx
+```
 
-   * `http://todo.local/` → frontend
-   * `http://todo.local/api/tasks` → backend
+**2. Crée l'Ingress** (`todo-ingress.yaml`) :
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: todo.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: todo-frontend-svc
+            port:
+              number: 80
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: todo-backend-svc
+            port:
+              number: 5000
+```
+
+Déploie :
+```bash
+kubectl apply -f todo-ingress.yaml
+kubectl get ingress
+```
+
+**3. Configure le fichier hosts**
+
+```bash
+# Récupère l'IP de Minikube
+minikube ip
+
+# Ajoute dans /etc/hosts
+echo "$(minikube ip) todo.local" | sudo tee -a /etc/hosts
+```
+
+**4. Teste l'application**
+
+```bash
+# Frontend
+curl http://todo.local/
+
+# Backend
+curl http://todo.local/api/health
+```
+
+Ouvre ton navigateur : `http://todo.local/`
 
 ---
 
-# Conclusion
+## Conclusion
 
-Dans ce module, tu as appris à :
+**Bravo !** Tu as déployé une application complète sur Kubernetes.
 
-* Démarrer avec Docker et comprendre la logique des conteneurs.
-* Découvrir l’architecture de Kubernetes.
-* Déployer la Todo App complète dans un cluster Kubernetes.
-* Connecter ses composants avec **Pods, Services, Deployments et Ingress**.
+**Ce que tu as appris :**
+- **Pods** : Unité de base (éphémère)
+- **Services** : Découverte et load balancing
+- **Deployments** : Gestion robuste des applications
+- **Ingress** : Exposition externe intelligente
 
-À la fin, ton application Todo App est **accessible via une URL**, exactement comme en production.
+**État de ton application :**
+- Frontend accessible
+- Backend API fonctionnelle
+- Base de données opérationnelle
+- Haute disponibilité (réplicas)
+- Accessible via une URL
 
-Prochaine étape : **la configuration et le stockage** avec ConfigMaps, Secrets et Volumes.
+**Limitations actuelles :**
+- Mots de passe en clair
+- Pas de persistance des données
+- Configuration en dur
 
----
+**Prochaine étape :** Module 2 - Configuration et stockage avec ConfigMaps, Secrets et Volumes !
+
+### Commandes récapitulatives
+
+```bash
+# Vue d'ensemble
+kubectl get all
+
+# Logs
+kubectl logs -l app=todo-backend --tail=20
+
+# Nettoyage
+kubectl delete deployment --all
+kubectl delete service --all
+kubectl delete ingress --all
+```
