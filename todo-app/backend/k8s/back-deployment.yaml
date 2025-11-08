@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend
+  namespace: todo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: todo-backend }
+  template:
+    metadata:
+      labels: { app: todo-backend }
+    spec:
+      containers:
+        - name: backend
+          image: todo-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 3000 }]
+          env:
+            - name: APP_NAME
+              valueFrom: { configMapKeyRef: { name: back-config, key: APP_NAME } }
+            - name: PORT
+              valueFrom: { configMapKeyRef: { name: back-config, key: PORT } }
+            - name: API_BASE_PATH
+              valueFrom: { configMapKeyRef: { name: back-config, key: API_BASE_PATH } }
+            - name: ADMIN_TOKEN
+              valueFrom: { secretKeyRef: { name: todo-secret, key: ADMIN_TOKEN } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-backend
+  namespace: todo
+spec:
+  selector: { app: todo-backend }
+  ports:
+    - port: 3000
+      targetPort: 3000
