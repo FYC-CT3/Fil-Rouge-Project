@@ -16,8 +16,14 @@ services:
 
   backend:
     build: ./backend
-    env_file:
-      - ./backend/.env.example
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: tododb
+      PORT: 3000
+      API_BASE_PATH: /api
     depends_on:
       db:
         condition: service_healthy
@@ -27,8 +33,11 @@ services:
 
   frontend:
     build: ./frontend
+    depends_on:
+      - backend
     ports:
-      - "8081:80"    
+      - "8081:80"
+    restart: unless-stopped
 
 volumes:
   dbdata:
