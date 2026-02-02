@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: back-config
+  namespace: todo
+data:
+  APP_NAME: "FYC Todo App"
+  PORT: "3000"
+  API_BASE_PATH: "/api"
+  DATABASE_URL: "postgres://postgres:postgres@todo-postgres:5432/tododb" 
+  DB_HOST: "todo-postgres"  
+  DB_PORT: "5432"
+  DB_NAME: "tododb"
+  DB_USER: "postgres"
