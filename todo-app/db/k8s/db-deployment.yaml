@@ -1,0 +1,26 @@
+
+
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: todo-db-deploy
+    spec:
+      replicas: 1  # Une seule pour la DB
+      selector:
+        matchLabels:
+          app: todo-db
+      template:
+        metadata:
+          labels:
+            app: todo-db
+        spec:
+          containers:
+          - name: postgres
+            image: postgres:15-alpine
+            ports:
+            - containerPort: 5432
+            env:
+            - name: POSTGRES_PASSWORD
+              value: "todo123"
+            - name: POSTGRES_DB
+              value: "todoapp"
