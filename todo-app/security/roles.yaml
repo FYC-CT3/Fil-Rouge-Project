@@ -1,0 +1,32 @@
+# Role pour le backend (peut lire ConfigMaps)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-role
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+---
+# Role pour le frontend (peut lire ConfigMaps et Services)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: frontend-role
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "services"]
+  verbs: ["get", "list"]
+---
+# Role pour la database (permissions minimales)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: database-role
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get"]
