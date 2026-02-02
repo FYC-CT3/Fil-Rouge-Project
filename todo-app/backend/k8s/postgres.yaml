@@ -65,3 +65,37 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-deny-all
+  namespace: todo
+spec:
+  podSelector:
+    matchLabels:
+      app: todo-postgres
+  policyTypes:
+  - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allow-from-backend
+  namespace: todo
+spec:
+  podSelector:
+    matchLabels:
+      app: todo-postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: todo-backend
+    ports:
+    - protocol: TCP
+      port: 5432
