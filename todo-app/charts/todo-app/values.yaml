@@ -1,0 +1,47 @@
+nameOverride: ""
+
+fullnameOverride: "todo"
+
+replicaCount:
+  backend: 1
+  frontend: 1
+
+image:
+  backend:
+    repository: todo-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: todo-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+service:
+  frontend:
+    type: NodePort
+    port: 80
+    nodePort: 30080
+  backend:
+    type: ClusterIP
+    port: 3000
+
+config:
+  appName: "FYC Todo App"
+  apiBasePath: "/api"
+
+postgres:
+  enabled: true
+  image: postgres:15-alpine
+  db:
+    name: tododb
+    user: postgres
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 1Gi
+
+secrets:
+  adminToken: "super-secret"
+  dbPassword: "postgres"
+  postgresPassword: "postgres"

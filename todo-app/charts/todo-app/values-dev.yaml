@@ -1,0 +1,11 @@
+service:
+  frontend:
+    nodePort: 30080
+
+postgres:
+  persistence:
+    size: 1Gi
+
+replicaCount:
+  backend: 1
+  frontend: 1

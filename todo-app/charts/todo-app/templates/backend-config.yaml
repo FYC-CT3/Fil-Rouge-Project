@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "todo-app.fullname" . }}-back-config
+data:
+  APP_NAME: {{ .Values.config.appName | quote }}
+  PORT: {{ .Values.service.backend.port | quote }}
+  API_BASE_PATH: {{ .Values.config.apiBasePath | quote }}
+
+  DB_HOST: {{ printf "%s-postgres" (include "todo-app.fullname" .) | quote }}
+  DB_PORT: {{ .Values.postgres.service.port | quote }}
+  DB_NAME: {{ .Values.postgres.db.name | quote }}
+  DB_USER: {{ .Values.postgres.db.user | quote }}
+
+  DATABASE_URL: {{ printf "postgres://%s:%s@%s-postgres:%v/%s" .Values.postgres.db.user .Values.secrets.dbPassword (include "todo-app.fullname" .) .Values.postgres.service.port .Values.postgres.db.name | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "todo-app.fullname" . }}-todo-secret
+type: Opaque
+stringData:
+  ADMIN_TOKEN: {{ .Values.secrets.adminToken | quote }}
+  DB_PASSWORD: {{ .Values.secrets.dbPassword | quote }}
